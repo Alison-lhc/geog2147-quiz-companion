@@ -182,6 +182,8 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
 .mp.px { border-style: dashed; }
 .mp.px .mptag { color: var(--L3); }
 .mp.px .sqn { background: var(--L3); }
+.QS { --c: var(--ex); } .QS.px { --c: var(--L3); }
+mark { background: var(--hit); color: inherit; border-radius: 2px; padding: 0 1px; }
 
 @media (max-width: 860px) {
   .app { display: block; }
@@ -209,8 +211,9 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
         <button class="tab" role="tab" data-v="L5" style="--c:var(--L5)">L5</button>
         <button class="tab" role="tab" data-v="L6" style="--c:var(--L6)">L6</button>
         <button class="tab" role="tab" data-v="pl" style="--c:var(--ex)">📍 Places 地點</button>
+        <button class="tab" role="tab" data-v="qs" style="--c:var(--L3)">📝 Questions 題目</button>
       </div>
-      <div class="srch"><input id="q" type="search" placeholder="Search a term or place – e.g. buffer, LoRa, Singapore, 香港" autocomplete="off" aria-label="Search terms"><span id="count"></span></div>
+      <div class="srch"><input id="q" type="search" placeholder="Search terms, places or question words – e.g. buffer, Singapore, 私隱" autocomplete="off" aria-label="Search terms"><span id="count"></span></div>
     </div>
     <nav class="list" id="list" aria-label="Terms"></nav>
   </aside>
@@ -268,6 +271,26 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
       return !t || exText(x).indexOf(t) !== -1;
     });
   }
+  function sqText(q) {
+    if (!q._t) q._t = plain([q.q, q.qz, q.s ? q.s.join(' ') : ''].concat(q.pts.map(function (p) { return p[0] + ' ' + p[1]; })).join(' ')).toLowerCase();
+    return q._t;
+  }
+  function visibleQ() {
+    var t = st.q.trim().toLowerCase();
+    var out = [];
+    SQ.forEach(function (q, k) {
+      if (/^L[1-6]$/.test(st.v) && q.L !== st.v) return;
+      if (!t || sqText(q).indexOf(t) !== -1) out.push(k);
+    });
+    return out;
+  }
+  // terms that list question k
+  var qTerms = SQ.map(function () { return []; });
+  E.forEach(function (e) { (e.sq || []).forEach(function (k) { qTerms[k].push(e.i); }); });
+  function qRowHTML(k) {
+    var q = SQ[k], key = 'q' + k;
+    return '<button class="row QS' + (q.x ? ' px' : '') + (st.q ? ' hit' : '') + '" data-k="' + key + '"' + (key === st.k ? ' aria-current="true"' : '') + '><span class="tg">' + q.lab + '</span><span class="tm"><b>' + esc(q.q) + '</b><i>' + esc(q.qz) + '</i></span><span class="nm">' + q.L + '</span></button>';
+  }
   function rowHTML(e) {
     var k = 'e' + e.i;
     return '<button class="row ' + e.L + (st.q ? ' hit' : '') + '" data-k="' + k + '"' + (k === st.k ? ' aria-current="true"' : '') + '><span class="tg">' + e.L + '</span><span class="tm"><b>' + esc(e.en) + '</b><i>' + esc(e.zh) + '</i></span><span class="nm">s.' + esc(e.s) + '</span></button>';
@@ -296,10 +319,27 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
       count.textContent = n + (n === 1 ? ' example' : ' examples');
       return;
     }
+    if (st.v === 'qs') {
+      var qsAll = visibleQ(), curG = null;
+      qsAll.sort(function (a, b) { return (SQ[a].x ? 1 : 0) - (SQ[b].x ? 1 : 0) || SQ[a].L.localeCompare(SQ[b].L) || a - b; });
+      qsAll.forEach(function (k) {
+        var g = (SQ[k].x ? 'Extra practice 額外練習題' : 'Quiz Mock Paper 模擬試卷') + ' · ' + SQ[k].L;
+        if (g !== curG) { curG = g; h += '<div class="gh QS' + (SQ[k].x ? ' px' : '') + '">' + g + '<small>' + LN[SQ[k].L] + '</small></div>'; }
+        h += qRowHTML(k); order.push('q' + k);
+      });
+      listEl.innerHTML = h || '<p class="empty">No question contains this word. Try a shorter word. 沒有題目包含這個字。</p>';
+      count.textContent = qsAll.length + (qsAll.length === 1 ? ' question' : ' questions');
+      return;
+    }
+    var qs = st.q.trim() ? visibleQ() : [];
     var xs = st.q.trim() ? visibleEx() : [];
     if (xs.length) {
       h += '<div class="gh EX">Real-world examples 真實例子<small>' + xs.length + '</small></div>';
       xs.forEach(function (x) { h += exRowHTML(x); order.push('x' + x.x); });
+    }
+    if (qs.length) {
+      h += '<div class="gh QS">Short questions &amp; model answers 題目及參考答案<small>' + qs.length + '</small></div>';
+      qs.forEach(function (k) { h += qRowHTML(k); order.push('q' + k); });
     }
     var arr = visible(), cur = null;
     arr.forEach(function (e) {
@@ -311,7 +351,7 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
       h += rowHTML(e); order.push('e' + e.i);
     });
     listEl.innerHTML = h || '<p class="empty">No match. Try a shorter word. 找不到，試試較短的字。</p>';
-    count.textContent = arr.length + (arr.length === 1 ? ' term' : ' terms') + (xs.length ? ' · ' + xs.length + ' ex.' : '');
+    count.textContent = arr.length + (arr.length === 1 ? ' term' : ' terms') + (qs.length ? ' · ' + qs.length + ' Q' : '') + (xs.length ? ' · ' + xs.length + ' ex.' : '');
   }
 
   function pts(list, L) {
@@ -397,7 +437,49 @@ h1 { font-size: 22px; margin: 2px 0 8px; }
     cin.className = 'cin'; cin.innerHTML = h; card.scrollTop = 0; wire(idx);
   }
 
+  function renderQ(k) {
+    var q = SQ[k], idx = order.indexOf('q' + k);
+    var h = '<button class="btn back QS" id="back">← 返回列表 Back</button>';
+    h += '<header class="chead QS' + (q.x ? ' px' : '') + '"><div class="meta">' + (q.x ? 'Extra practice question · 額外練習題' : 'Quiz Mock Paper · 模擬試卷') + ' · ' + q.L + ' ' + LN[q.L] + '</div><h2>' + q.lab + ' · ' + esc(q.q) + '</h2><div class="z">' + esc(q.qz) + '</div>';
+    h += '<div class="pills"><span class="pill">Marks <b>' + q.m + '</b></span><span class="pill">' + q.L + ' · ' + PDF[q.L] + '</span></div></header>';
+    var rel = qTerms[k].map(function (i) { return byId[i]; });
+    h += '<nav class="jump QS"><a href="#sec-ex">答案 Answer</a>' + (rel.length ? '<a href="#sec-rel">相關術語 Terms</a>' : '') + '</nav>';
+    h += '<section class="sec QS" id="sec-ex"><h3 class="sech">Question &amp; model answer <small>題目及參考答案</small></h3>' + sqBlock(k, [], '', -1) + '</section>';
+    if (rel.length) {
+      h += '<section class="sec QS" id="sec-rel"><h3 class="sech">Related terms <small>相關術語（點選開啟筆記）</small></h3><div class="rl">';
+      rel.forEach(function (e) { h += '<button class="row ' + e.L + '" data-k="e' + e.i + '"><span class="tg">' + e.L + '</span><span class="tm"><b>' + esc(e.en) + '</b><i>' + esc(e.zh) + '</i></span><span class="nm">s.' + esc(e.s) + '</span></button>'; });
+      h += '</div></section>';
+    }
+    h += navHTML(idx, 'QS');
+    cin.className = 'cin'; cin.innerHTML = h; card.scrollTop = 0; wire(idx);
+  }
+  // highlight the search words inside the opened card
+  function markHits() {
+    var t = st.q.trim().toLowerCase();
+    if (!t) return null;
+    var walker = document.createTreeWalker(cin, NodeFilter.SHOW_TEXT, null), nodes = [], nd;
+    while ((nd = walker.nextNode())) { if (nd.nodeValue.toLowerCase().indexOf(t) !== -1 && !nd.parentNode.closest('button.btn')) nodes.push(nd); }
+    var first = null;
+    nodes.forEach(function (node) {
+      var v = node.nodeValue, low = v.toLowerCase(), i = 0, j, frag = document.createDocumentFragment();
+      while ((j = low.indexOf(t, i)) !== -1) {
+        frag.appendChild(document.createTextNode(v.slice(i, j)));
+        var m = document.createElement('mark'); m.textContent = v.slice(j, j + t.length); frag.appendChild(m);
+        if (!first) first = m;
+        i = j + t.length;
+      }
+      frag.appendChild(document.createTextNode(v.slice(i)));
+      node.parentNode.replaceChild(frag, node);
+    });
+    return first;
+  }
   function renderCard() {
+    renderCard0();
+    var first = markHits();
+    if (first && st.k && st.k.charAt(0) === 'q') { var top = first.getBoundingClientRect().top - card.getBoundingClientRect().top; if (top > card.clientHeight * 0.6) card.scrollTop = top - 120; }
+  }
+  function renderCard0() {
+    if (st.k && st.k.charAt(0) === 'q' && SQ[+st.k.slice(1)]) return renderQ(+st.k.slice(1));
     if (st.k && st.k.charAt(0) === 'x' && X[+st.k.slice(1)]) return renderEx(X[+st.k.slice(1)]);
     var e = st.k ? byId[+st.k.slice(1)] : null;
     if (!e) {
